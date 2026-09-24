@@ -12,6 +12,7 @@ import { store, exportMarkdown } from "./store.js";
 import { buildMindMap, layoutMindMap, renderMindMap, renderLegend } from "./ui/mindmap.js";
 import { CATEGORIES, getCategory, classifyMaterial, suggestTags } from "./nlp/classify.js";
 import { kb, kbExportMarkdown } from "./data/kb.js";
+import * as LLM from "./nlp/llm.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {};
@@ -36,7 +37,9 @@ const els = {};
   "graphDepth", "btnGraphReset", "graphCanvas", "graphGroup", "graphCatFilter", "graphLegend",
   "chatWindow", "modeRow", "suggestRow", "qaInput", "btnAsk",
   "quizCount", "btnGenQuiz", "quizBox", "quizSubmitRow", "btnSubmitQuiz", "btnRedoQuiz", "quizResult",
-  "masteryCanvas", "reportStats", "wrongBox", "toast"
+  "masteryCanvas", "reportStats", "wrongBox", "toast",
+  "btnLlm", "llmModal", "llmClose", "llmProvider", "llmBaseUrl", "llmApiKey", "llmModel",
+  "llmEnabled", "llmState", "llmTest", "llmTestResult", "llmClear", "llmCancel", "llmSave"
 ].forEach((id) => (els[id] = $(id)));
 
 const state = {
@@ -1672,7 +1675,7 @@ function pushChat(role, text, html, extra) {
   return div;
 }
 
-function handleAsk(question) {
+async function handleAsk(question) {
   const q = (question || els.qaInput.value).trim();
   if (!q) return;
   els.qaInput.value = "";
@@ -1685,16 +1688,142 @@ function handleAsk(question) {
   }
   state.qaCount++;
   updateStats();
+
+  // 本地检索先行：结果既是无大模型时的兜底答案，也是给大模型的素材上下文（RAG）
   const res = ask(state.corpus, q, state.mode);
   const conf = Math.round((res.confidence || 0) * 100);
-  let meta = `<div class="meta">置信度 ${conf}% · ${res.hits.length ? "命中知识点：" + res.hits.map((h) => escapeHtml(h.term)).join("、") : "未命中明确知识点"}`;
-  if (res.refs.length) {
-    meta += ` <br>来源：` + res.refs.map((r) => `<span class="cite">${escapeHtml(r.title)}·第${r.idx}句</span>`).join(" ");
+  const refsMeta = res.refs.length
+    ? ` <br>来源：` + res.refs.map((r) => `<span class="cite">${escapeHtml(r.title)}·第${r.idx}句</span>`).join(" ")
+    : "";
+  const localMeta =
+    `<div class="meta">置信度 ${conf}% · ${res.hits.length ? "命中知识点：" + res.hits.map((h) => escapeHtml(h.term)).join("、") : "未命中明确知识点"}${refsMeta}</div>`;
+
+  const cfg = LLM.getConfig();
+  if (LLM.isReady(cfg)) {
+    const box = pushChat("bot", "正在调用大模型生成答案…", null, "");
+    box.classList.add("loading");
+    try {
+      const text = await LLM.answer(q, res.refs, state.mode, cfg);
+      box.classList.remove("loading");
+      box.innerHTML =
+        mdToHtml(text) + `<div class="meta"><span class="src-tag llm">大模型生成</span>${refsMeta}</div>`;
+      els.chatWindow.scrollTop = els.chatWindow.scrollHeight;
+      store.pushChat({ role: "bot", text });
+      renderSuggest(res.suggested);
+      return;
+    } catch (e) {
+      box.classList.remove("loading");
+      box.innerHTML =
+        mdToHtml(res.text) +
+        localMeta +
+        `<div class="fallback-note">⚠ 大模型调用失败（${escapeHtml(e.message || "未知错误")}），已自动降级为本地规则引擎作答。</div>`;
+      els.chatWindow.scrollTop = els.chatWindow.scrollHeight;
+      store.pushChat({ role: "bot", text: res.text });
+      renderSuggest(res.suggested);
+      return;
+    }
   }
-  meta += `</div>`;
-  pushChat("bot", res.text, res.html, meta);
+
+  pushChat(
+    "bot",
+    res.text,
+    res.html,
+    `<div class="meta"><span class="src-tag local">本地引擎</span>${refsMeta}</div>`
+  );
   store.pushChat({ role: "bot", text: res.text });
   renderSuggest(res.suggested);
+}
+
+/* ================= 大模型设置面板 ================= */
+
+function fillLlmForm(cfg) {
+  els.llmProvider.value = cfg.provider || "custom";
+  els.llmBaseUrl.value = cfg.baseUrl || "";
+  els.llmApiKey.value = cfg.apiKey || "";
+  els.llmModel.value = cfg.model || "";
+  els.llmEnabled.checked = !!cfg.enabled;
+  renderLlmState(cfg);
+}
+
+function renderLlmState(cfg = LLM.getConfig()) {
+  const on = LLM.isReady(cfg);
+  els.llmState.className = "micro " + (on ? "state-ok" : "state-off");
+  els.llmState.textContent = on ? `已启用 · ${cfg.model}` : cfg.apiKey ? "信息不完整" : "未配置（使用本地引擎）";
+  els.engineChip.textContent = on ? `大模型就绪 · ${cfg.model}` : "本地引擎就绪";
+}
+
+function openLlmModal() {
+  fillLlmForm(LLM.getConfig());
+  els.llmTestResult.textContent = "";
+  els.llmModal.hidden = false;
+}
+
+function closeLlmModal() {
+  els.llmModal.hidden = true;
+}
+
+function collectLlmForm() {
+  return {
+    provider: els.llmProvider.value,
+    baseUrl: els.llmBaseUrl.value.trim(),
+    apiKey: els.llmApiKey.value.trim(),
+    model: els.llmModel.value.trim(),
+    enabled: els.llmEnabled.checked,
+    timeout: 45
+  };
+}
+
+async function runLlmTest() {
+  const cfg = collectLlmForm();
+  if (!cfg.baseUrl || !cfg.apiKey || !cfg.model) {
+    els.llmTestResult.className = "micro state-err";
+    els.llmTestResult.textContent = "请先填全 Base URL、API Key 和模型名";
+    return;
+  }
+  els.llmTestResult.className = "micro";
+  els.llmTestResult.textContent = "正在测试…";
+  try {
+    const r = await LLM.testConnection(cfg);
+    els.llmTestResult.className = "micro state-ok";
+    els.llmTestResult.textContent = `连接成功（${r.ms} ms）：${r.sample}`;
+  } catch (e) {
+    els.llmTestResult.className = "micro state-err";
+    els.llmTestResult.textContent = "失败：" + (e.message || "未知错误");
+  }
+}
+
+function bindLlm() {
+  els.llmProvider.innerHTML = LLM.PROVIDERS.map(
+    (p) => `<option value="${p.id}">${p.name}</option>`
+  ).join("");
+  els.llmProvider.onchange = () => {
+    const p = LLM.PROVIDERS.find((x) => x.id === els.llmProvider.value);
+    if (!p) return;
+    if (p.baseUrl) els.llmBaseUrl.value = p.baseUrl;
+    if (p.model) els.llmModel.value = p.model;
+    els.llmTestResult.textContent = p.hint ? `申请入口：${p.hint}` : "";
+    els.llmTestResult.className = "micro";
+  };
+  els.btnLlm.onclick = openLlmModal;
+  els.llmClose.onclick = closeLlmModal;
+  els.llmCancel.onclick = closeLlmModal;
+  els.llmModal.onclick = (e) => {
+    if (e.target === els.llmModal) closeLlmModal();
+  };
+  els.llmTest.onclick = runLlmTest;
+  els.llmSave.onclick = () => {
+    LLM.saveConfig(collectLlmForm());
+    renderLlmState();
+    closeLlmModal();
+    toast("大模型配置已保存到本地");
+  };
+  els.llmClear.onclick = () => {
+    LLM.clearConfig();
+    fillLlmForm(LLM.getConfig());
+    els.llmTestResult.textContent = "已清除，答疑将使用本地引擎";
+    els.llmTestResult.className = "micro";
+    toast("已清除大模型配置");
+  };
 }
 
 function renderSuggest(list) {
@@ -2249,6 +2378,7 @@ function bindEvents() {
   });
 
   els.btnAsk.onclick = () => handleAsk();
+  bindLlm();
   els.qaInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") handleAsk();
   });
@@ -2269,6 +2399,7 @@ async function boot() {
   bindEvents();
   syncGrainLabel();
   fillCategorySelects();
+  renderLlmState();
   if (els.graphGroup) els.graphGroup.value = state.graphGroup;
 
   const st = store.all;
