@@ -20,6 +20,7 @@
   </div>
   <div class="app-bar-actions">
     <span class="engine-chip" id="engineChip" title="本地引擎运行状态">本地引擎就绪</span>
+    <button class="btn ghost" id="btnLlm" title="配置大模型 API">⚙ 大模型</button>
     <button class="btn ghost" id="btnSamples">载入示例素材</button>
     <button class="btn ghost" id="btnExport">导出笔记</button>
     <button class="btn icon" id="btnTheme" title="切换主题">◐</button>
@@ -309,6 +310,55 @@
 </main>
 
 <div id="toast" class="toast"></div>
+
+<!-- 大模型设置 -->
+<div class="modal" id="llmModal" hidden>
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3>大模型接入设置</h3>
+      <button class="ico-btn" id="llmClose" title="关闭">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-tip">
+        采用 <b>自带 Key</b> 模式：密钥只保存在你自己的浏览器本地（localStorage），不会上传、不会写进代码、不会随仓库公开。
+        未配置或调用失败时，答疑会自动降级为本地规则引擎，功能不受影响。
+      </p>
+      <label class="field">
+        <span>服务商</span>
+        <select id="llmProvider" class="input"></select>
+      </label>
+      <label class="field">
+        <span>Base URL<em>（OpenAI 兼容地址）</em></span>
+        <input id="llmBaseUrl" class="input" placeholder="https://api.deepseek.com/v1" />
+      </label>
+      <label class="field">
+        <span>API Key</span>
+        <input id="llmApiKey" class="input" type="password" placeholder="sk-..." autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>模型名</span>
+        <input id="llmModel" class="input" placeholder="deepseek-chat" />
+      </label>
+      <div class="field-row">
+        <label class="chk"><input type="checkbox" id="llmEnabled" checked /> 启用大模型答疑</label>
+        <span class="micro" id="llmState"></span>
+      </div>
+      <div class="llm-test">
+        <button class="btn ghost sm" id="llmTest">测试连接</button>
+        <span class="micro" id="llmTestResult"></span>
+      </div>
+      <div class="modal-note">
+        <b>关于跨域：</b>部分服务商不允许浏览器直接调用，会出现「请求被浏览器拦截」。遇到这种情况请换一家支持浏览器直连的服务，或改用服务端转发。
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn link sm" id="llmClear">清除配置</button>
+      <span class="spacer"></span>
+      <button class="btn ghost" id="llmCancel">取消</button>
+      <button class="btn primary" id="llmSave">保存</button>
+    </div>
+  </div>
+</div>
 
 <!-- 原图查看器 -->
 <div class="lightbox" id="lightbox" hidden>
