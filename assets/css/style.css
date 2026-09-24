@@ -518,6 +518,41 @@ select.input.sm { min-width: 118px; }
   font-size: 13px; opacity: 0; pointer-events: none; transition: .25s; z-index: 90;
 }
 .toast.show { opacity: 1; transform: translateX(-50%); }
+
+/* ---------- 大模型设置弹窗 ---------- */
+.modal { position: fixed; inset: 0; background: rgba(12, 16, 24, .45); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal[hidden] { display: none; }
+.modal-card { width: min(560px, calc(100vw - 40px)); max-height: calc(100vh - 60px); overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 12px 40px rgba(16, 24, 40, .18); }
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.modal-head h3 { font-size: 15px; margin: 0; }
+.modal-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.modal-tip { font-size: 12.5px; line-height: 1.7; color: var(--muted); background: var(--primary-soft); border-radius: 10px; padding: 10px 12px; margin: 0; }
+.modal-tip b { color: var(--text); }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field > span { font-size: 12.5px; color: var(--text); font-weight: 500; }
+.field > span em { font-style: normal; color: var(--muted); font-weight: 400; }
+.field .input { width: 100%; }
+.field-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.chk { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.chk input { width: 15px; height: 15px; }
+.llm-test { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.modal-note { font-size: 12px; line-height: 1.7; color: var(--muted); border-left: 3px solid var(--amber); padding: 2px 0 2px 10px; }
+.modal-note b { color: var(--amber); }
+.modal-foot { display: flex; align-items: center; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); }
+.modal-foot .spacer { flex: 1; }
+.state-ok { color: var(--green); }
+.state-off { color: var(--muted); }
+.state-err { color: var(--red); }
+
+/* 答疑消息：大模型标注与加载态 */
+.msg .src-tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; margin-left: 6px; vertical-align: 1px; }
+.src-tag.llm { background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); }
+.src-tag.local { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+.msg.loading { color: var(--muted); }
+.msg.loading::after { content: ""; display: inline-block; width: 12px; height: 12px; margin-left: 8px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -1px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.fallback-note { margin-top: 6px; font-size: 11.5px; color: var(--amber); }
+
 .hidden { display: none !important; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 40%, transparent); border-radius: 8px; }
