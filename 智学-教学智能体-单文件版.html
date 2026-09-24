@@ -525,6 +525,41 @@ select.input.sm { min-width: 118px; }
   font-size: 13px; opacity: 0; pointer-events: none; transition: .25s; z-index: 90;
 }
 .toast.show { opacity: 1; transform: translateX(-50%); }
+
+/* ---------- 大模型设置弹窗 ---------- */
+.modal { position: fixed; inset: 0; background: rgba(12, 16, 24, .45); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal[hidden] { display: none; }
+.modal-card { width: min(560px, calc(100vw - 40px)); max-height: calc(100vh - 60px); overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 12px 40px rgba(16, 24, 40, .18); }
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.modal-head h3 { font-size: 15px; margin: 0; }
+.modal-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.modal-tip { font-size: 12.5px; line-height: 1.7; color: var(--muted); background: var(--primary-soft); border-radius: 10px; padding: 10px 12px; margin: 0; }
+.modal-tip b { color: var(--text); }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field > span { font-size: 12.5px; color: var(--text); font-weight: 500; }
+.field > span em { font-style: normal; color: var(--muted); font-weight: 400; }
+.field .input { width: 100%; }
+.field-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.chk { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.chk input { width: 15px; height: 15px; }
+.llm-test { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.modal-note { font-size: 12px; line-height: 1.7; color: var(--muted); border-left: 3px solid var(--amber); padding: 2px 0 2px 10px; }
+.modal-note b { color: var(--amber); }
+.modal-foot { display: flex; align-items: center; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); }
+.modal-foot .spacer { flex: 1; }
+.state-ok { color: var(--green); }
+.state-off { color: var(--muted); }
+.state-err { color: var(--red); }
+
+/* 答疑消息：大模型标注与加载态 */
+.msg .src-tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; margin-left: 6px; vertical-align: 1px; }
+.src-tag.llm { background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); }
+.src-tag.local { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+.msg.loading { color: var(--muted); }
+.msg.loading::after { content: ""; display: inline-block; width: 12px; height: 12px; margin-left: 8px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -1px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.fallback-note { margin-top: 6px; font-size: 11.5px; color: var(--amber); }
+
 .hidden { display: none !important; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 40%, transparent); border-radius: 8px; }
@@ -544,6 +579,7 @@ select.input.sm { min-width: 118px; }
   </div>
   <div class="app-bar-actions">
     <span class="engine-chip" id="engineChip" title="本地引擎运行状态">本地引擎就绪</span>
+    <button class="btn ghost" id="btnLlm" title="配置大模型 API">⚙ 大模型</button>
     <button class="btn ghost" id="btnSamples">载入示例素材</button>
     <button class="btn ghost" id="btnExport">导出笔记</button>
     <button class="btn icon" id="btnTheme" title="切换主题">◐</button>
@@ -833,6 +869,55 @@ select.input.sm { min-width: 118px; }
 </main>
 
 <div id="toast" class="toast"></div>
+
+<!-- 大模型设置 -->
+<div class="modal" id="llmModal" hidden>
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3>大模型接入设置</h3>
+      <button class="ico-btn" id="llmClose" title="关闭">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-tip">
+        采用 <b>自带 Key</b> 模式：密钥只保存在你自己的浏览器本地（localStorage），不会上传、不会写进代码、不会随仓库公开。
+        未配置或调用失败时，答疑会自动降级为本地规则引擎，功能不受影响。
+      </p>
+      <label class="field">
+        <span>服务商</span>
+        <select id="llmProvider" class="input"></select>
+      </label>
+      <label class="field">
+        <span>Base URL<em>（OpenAI 兼容地址）</em></span>
+        <input id="llmBaseUrl" class="input" placeholder="https://api.deepseek.com/v1" />
+      </label>
+      <label class="field">
+        <span>API Key</span>
+        <input id="llmApiKey" class="input" type="password" placeholder="sk-..." autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>模型名</span>
+        <input id="llmModel" class="input" placeholder="deepseek-chat" />
+      </label>
+      <div class="field-row">
+        <label class="chk"><input type="checkbox" id="llmEnabled" checked /> 启用大模型答疑</label>
+        <span class="micro" id="llmState"></span>
+      </div>
+      <div class="llm-test">
+        <button class="btn ghost sm" id="llmTest">测试连接</button>
+        <span class="micro" id="llmTestResult"></span>
+      </div>
+      <div class="modal-note">
+        <b>关于跨域：</b>部分服务商不允许浏览器直接调用，会出现「请求被浏览器拦截」。遇到这种情况请换一家支持浏览器直连的服务，或改用服务端转发。
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn link sm" id="llmClear">清除配置</button>
+      <span class="spacer"></span>
+      <button class="btn ghost" id="llmCancel">取消</button>
+      <button class="btn primary" id="llmSave">保存</button>
+    </div>
+  </div>
+</div>
 
 <!-- 原图查看器 -->
 <div class="lightbox" id="lightbox" hidden>
@@ -2659,7 +2744,7 @@ TCP 是一种面向连接的、可靠的传输层协议。建立连接需要经�
       this.patch({ chat: [] });
     }
   };
-  function exportMarkdown(materials, termsByMaterial, chat) {
+  function exportMarkdown(materials, termsByMaterial, chat2) {
     const lines = ["# 智学 · 学习笔记", "", `> 导出时间：${(/* @__PURE__ */ new Date()).toLocaleString()}`, ""];
     lines.push("## 一、素材清单", "");
     materials.forEach((m, i) => {
@@ -2676,7 +2761,7 @@ TCP 是一种面向连接的、可靠的传输层协议。建立连接需要经�
       lines.push("");
     }
     lines.push("## 三、答疑记录", "");
-    chat.forEach((c) => {
+    chat2.forEach((c) => {
       lines.push(`**${c.role === "user" ? "我" : "助教"}**：${c.text.replace(/\n/g, " · ").slice(0, 400)}`, "");
     });
     return lines.join("\n");
@@ -3455,6 +3540,122 @@ TCP 是一种面向连接的、可靠的传输层协议。建立连接需要经�
     return lines.join("\n");
   }
 
+  // assets/js/nlp/llm.js
+  var STORE_KEY = "zhixue.llm.config";
+  var PROVIDERS = [
+    { id: "deepseek", name: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat", hint: "deepseek.com 控制台申请" },
+    { id: "zhipu", name: "智谱 GLM", baseUrl: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4-flash", hint: "open.bigmodel.cn 控制台申请" },
+    { id: "qwen", name: "通义千问", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen-plus", hint: "阿里云百炼控制台申请" },
+    { id: "moonshot", name: "Moonshot (Kimi)", baseUrl: "https://api.moonshot.cn/v1", model: "moonshot-v1-8k", hint: "platform.moonshot.cn 申请" },
+    { id: "siliconflow", name: "硅基流动 SiliconFlow", baseUrl: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen2.5-7B-Instruct", hint: "cloud.siliconflow.cn 申请，有免费额度" },
+    { id: "openai", name: "OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", hint: "platform.openai.com 申请" },
+    { id: "local", name: "本地代理（解决跨域）", baseUrl: "http://127.0.0.1:8787/v1", model: "deepseek-chat", hint: "先运行 node tools/llm-proxy.mjs，模型名按你的上游填" },
+    { id: "custom", name: "自定义（兼容 OpenAI）", baseUrl: "", model: "", hint: "填写任意 OpenAI 兼容服务地址" }
+  ];
+  var DEFAULT_CFG = { provider: "deepseek", baseUrl: "", apiKey: "", model: "", enabled: true, timeout: 45 };
+  function getConfig() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return { ...DEFAULT_CFG };
+      return { ...DEFAULT_CFG, ...JSON.parse(raw) };
+    } catch {
+      return { ...DEFAULT_CFG };
+    }
+  }
+  function saveConfig(cfg) {
+    localStorage.setItem(STORE_KEY, JSON.stringify(cfg));
+  }
+  function clearConfig() {
+    localStorage.removeItem(STORE_KEY);
+  }
+  function isReady(cfg = getConfig()) {
+    return !!(cfg && cfg.enabled && cfg.baseUrl && cfg.apiKey && cfg.model);
+  }
+  function endpoint(baseUrl) {
+    return baseUrl.replace(/\/+$/, "") + "/chat/completions";
+  }
+  async function chat(messages, cfg = getConfig(), { timeoutSec = 45 } = {}) {
+    if (!isReady(cfg)) throw new Error("未配置大模型");
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), (cfg.timeout || timeoutSec) * 1e3);
+    let res;
+    try {
+      res = await fetch(endpoint(cfg.baseUrl), {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + cfg.apiKey
+        },
+        body: JSON.stringify({
+          model: cfg.model,
+          messages,
+          temperature: 0.3,
+          stream: false
+        })
+      });
+    } catch (e) {
+      clearTimeout(timer);
+      if (e.name === "AbortError") throw new Error("请求超时，可尝试调大超时时间或换一个模型");
+      throw new Error("请求被浏览器拦截或网络不可达（常见于 CORS 跨域限制），请改用支持浏览器直连的服务，或检查地址是否正确");
+    }
+    clearTimeout(timer);
+    if (!res.ok) {
+      let detail = "";
+      try {
+        const j = await res.json();
+        detail = j && (j.error?.message || j.message) || "";
+      } catch {
+        detail = await res.text().catch(() => "");
+      }
+      if (res.status === 401 || res.status === 403) throw new Error("鉴权失败（401/403）：API Key 不正确或已失效");
+      if (res.status === 429) throw new Error("触发限流（429）：稍等片刻再试，或确认账户余额");
+      if (res.status === 404) throw new Error("接口不存在（404）：Base URL 或模型名可能有误");
+      throw new Error(`调用失败 ${res.status}${detail ? "：" + detail : ""}`);
+    }
+    const data = await res.json();
+    const text = data?.choices?.[0]?.message?.content;
+    if (!text) throw new Error("返回内容为空，请确认模型名是否正确");
+    return String(text).trim();
+  }
+  var MODE_STYLE = {
+    direct: "直接、准确地回答，先给结论，再补充关键细节。",
+    steps: "分步骤讲解，用 1. 2. 3. 编号列出，每步说明「做什么」和「为什么」。",
+    example: "在讲解后必须给出至少一个贴近生活的具体例子，帮助学生理解。",
+    socratic: "不要直接给出答案。用 2-3 个层层递进的反问引导学生自己思考，最后再给出简要提示。"
+  };
+  async function answer(question, refs, mode = "direct", cfg = getConfig()) {
+    const ctx = (refs || []).slice(0, 6).map((r, i) => `[${i + 1}] ${r.text}`).join("\n");
+    const system = [
+      "你是一个耐心、严谨的教学助教，服务于一个教学辅助工具。",
+      "你会收到「素材片段」和「学生提问」。",
+      "规则：",
+      "1. 优先依据素材片段回答；素材里没有的内容，明确说明「素材中未提及」，然后可以基于常识补充，并注明这是常识补充。",
+      "2. 不要编造素材中不存在的数字、公式或结论。",
+      "3. 使用 Markdown 输出，条理清晰，语言简洁，面向学生。",
+      "4. 回答控制在 300 字以内，除非问题确实需要更长篇幅。",
+      "当前讲解方式：" + (MODE_STYLE[mode] || MODE_STYLE.direct)
+    ].join("\n");
+    const user = [
+      ctx ? `素材片段：
+${ctx}
+` : "（本次没有检索到素材片段）\n",
+      `学生提问：${question}`
+    ].join("\n");
+    return chat(
+      [
+        { role: "system", content: system },
+        { role: "user", content: user }
+      ],
+      cfg
+    );
+  }
+  async function testConnection(cfg = getConfig()) {
+    const t0 = Date.now();
+    const text = await chat([{ role: "user", content: "回复两个字：正常" }], cfg, { timeoutSec: 30 });
+    return { ok: true, ms: Date.now() - t0, sample: text.slice(0, 60) };
+  }
+
   // assets/js/app.js
   var $ = (id) => document.getElementById(id);
   var els = {};
@@ -3561,7 +3762,21 @@ TCP 是一种面向连接的、可靠的传输层协议。建立连接需要经�
     "masteryCanvas",
     "reportStats",
     "wrongBox",
-    "toast"
+    "toast",
+    "btnLlm",
+    "llmModal",
+    "llmClose",
+    "llmProvider",
+    "llmBaseUrl",
+    "llmApiKey",
+    "llmModel",
+    "llmEnabled",
+    "llmState",
+    "llmTest",
+    "llmTestResult",
+    "llmClear",
+    "llmCancel",
+    "llmSave"
   ].forEach((id) => els[id] = $(id));
   var state = {
     materials: [],
@@ -4988,7 +5203,7 @@ TCP 是一种面向连接的、可靠的传输层协议。建立连接需要经�
     els.chatWindow.scrollTop = els.chatWindow.scrollHeight;
     return div;
   }
-  function handleAsk(question) {
+  async function handleAsk(question) {
     const q = (question || els.qaInput.value).trim();
     if (!q) return;
     els.qaInput.value = "";
@@ -5003,14 +5218,120 @@ TCP 是一种面向连接的、可靠的传输层协议。建立连接需要经�
     updateStats();
     const res = ask(state.corpus, q, state.mode);
     const conf = Math.round((res.confidence || 0) * 100);
-    let meta = `<div class="meta">置信度 ${conf}% · ${res.hits.length ? "命中知识点：" + res.hits.map((h) => escapeHtml(h.term)).join("、") : "未命中明确知识点"}`;
-    if (res.refs.length) {
-      meta += ` <br>来源：` + res.refs.map((r) => `<span class="cite">${escapeHtml(r.title)}·第${r.idx}句</span>`).join(" ");
+    const refsMeta = res.refs.length ? ` <br>来源：` + res.refs.map((r) => `<span class="cite">${escapeHtml(r.title)}·第${r.idx}句</span>`).join(" ") : "";
+    const localMeta = `<div class="meta">置信度 ${conf}% · ${res.hits.length ? "命中知识点：" + res.hits.map((h) => escapeHtml(h.term)).join("、") : "未命中明确知识点"}${refsMeta}</div>`;
+    const cfg = getConfig();
+    if (isReady(cfg)) {
+      const box = pushChat("bot", "正在调用大模型生成答案…", null, "");
+      box.classList.add("loading");
+      try {
+        const text = await answer(q, res.refs, state.mode, cfg);
+        box.classList.remove("loading");
+        box.innerHTML = mdToHtml(text) + `<div class="meta"><span class="src-tag llm">大模型生成</span>${refsMeta}</div>`;
+        els.chatWindow.scrollTop = els.chatWindow.scrollHeight;
+        store.pushChat({ role: "bot", text });
+        renderSuggest(res.suggested);
+        return;
+      } catch (e) {
+        box.classList.remove("loading");
+        box.innerHTML = mdToHtml(res.text) + localMeta + `<div class="fallback-note">⚠ 大模型调用失败（${escapeHtml(e.message || "未知错误")}），已自动降级为本地规则引擎作答。</div>`;
+        els.chatWindow.scrollTop = els.chatWindow.scrollHeight;
+        store.pushChat({ role: "bot", text: res.text });
+        renderSuggest(res.suggested);
+        return;
+      }
     }
-    meta += `</div>`;
-    pushChat("bot", res.text, res.html, meta);
+    pushChat(
+      "bot",
+      res.text,
+      res.html,
+      `<div class="meta"><span class="src-tag local">本地引擎</span>${refsMeta}</div>`
+    );
     store.pushChat({ role: "bot", text: res.text });
     renderSuggest(res.suggested);
+  }
+  function fillLlmForm(cfg) {
+    els.llmProvider.value = cfg.provider || "custom";
+    els.llmBaseUrl.value = cfg.baseUrl || "";
+    els.llmApiKey.value = cfg.apiKey || "";
+    els.llmModel.value = cfg.model || "";
+    els.llmEnabled.checked = !!cfg.enabled;
+    renderLlmState(cfg);
+  }
+  function renderLlmState(cfg = getConfig()) {
+    const on = isReady(cfg);
+    els.llmState.className = "micro " + (on ? "state-ok" : "state-off");
+    els.llmState.textContent = on ? `已启用 · ${cfg.model}` : cfg.apiKey ? "信息不完整" : "未配置（使用本地引擎）";
+    els.engineChip.textContent = on ? `大模型就绪 · ${cfg.model}` : "本地引擎就绪";
+  }
+  function openLlmModal() {
+    fillLlmForm(getConfig());
+    els.llmTestResult.textContent = "";
+    els.llmModal.hidden = false;
+  }
+  function closeLlmModal() {
+    els.llmModal.hidden = true;
+  }
+  function collectLlmForm() {
+    return {
+      provider: els.llmProvider.value,
+      baseUrl: els.llmBaseUrl.value.trim(),
+      apiKey: els.llmApiKey.value.trim(),
+      model: els.llmModel.value.trim(),
+      enabled: els.llmEnabled.checked,
+      timeout: 45
+    };
+  }
+  async function runLlmTest() {
+    const cfg = collectLlmForm();
+    if (!cfg.baseUrl || !cfg.apiKey || !cfg.model) {
+      els.llmTestResult.className = "micro state-err";
+      els.llmTestResult.textContent = "请先填全 Base URL、API Key 和模型名";
+      return;
+    }
+    els.llmTestResult.className = "micro";
+    els.llmTestResult.textContent = "正在测试…";
+    try {
+      const r = await testConnection(cfg);
+      els.llmTestResult.className = "micro state-ok";
+      els.llmTestResult.textContent = `连接成功（${r.ms} ms）：${r.sample}`;
+    } catch (e) {
+      els.llmTestResult.className = "micro state-err";
+      els.llmTestResult.textContent = "失败：" + (e.message || "未知错误");
+    }
+  }
+  function bindLlm() {
+    els.llmProvider.innerHTML = PROVIDERS.map(
+      (p) => `<option value="${p.id}">${p.name}</option>`
+    ).join("");
+    els.llmProvider.onchange = () => {
+      const p = PROVIDERS.find((x) => x.id === els.llmProvider.value);
+      if (!p) return;
+      if (p.baseUrl) els.llmBaseUrl.value = p.baseUrl;
+      if (p.model) els.llmModel.value = p.model;
+      els.llmTestResult.textContent = p.hint ? `申请入口：${p.hint}` : "";
+      els.llmTestResult.className = "micro";
+    };
+    els.btnLlm.onclick = openLlmModal;
+    els.llmClose.onclick = closeLlmModal;
+    els.llmCancel.onclick = closeLlmModal;
+    els.llmModal.onclick = (e) => {
+      if (e.target === els.llmModal) closeLlmModal();
+    };
+    els.llmTest.onclick = runLlmTest;
+    els.llmSave.onclick = () => {
+      saveConfig(collectLlmForm());
+      renderLlmState();
+      closeLlmModal();
+      toast("大模型配置已保存到本地");
+    };
+    els.llmClear.onclick = () => {
+      clearConfig();
+      fillLlmForm(getConfig());
+      els.llmTestResult.textContent = "已清除，答疑将使用本地引擎";
+      els.llmTestResult.className = "micro";
+      toast("已清除大模型配置");
+    };
   }
   function renderSuggest(list) {
     const items = list && list.length ? list : state.corpus ? suggestQuestions(state.corpus, "", 4) : [];
@@ -5489,6 +5810,7 @@ TCP 是一种面向连接的、可靠的传输层协议。建立连接需要经�
       toast(`已切换为「${b.textContent}」模式`);
     });
     els.btnAsk.onclick = () => handleAsk();
+    bindLlm();
     els.qaInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") handleAsk();
     });
@@ -5505,6 +5827,7 @@ TCP 是一种面向连接的、可靠的传输层协议。建立连接需要经�
     bindEvents();
     syncGrainLabel();
     fillCategorySelects();
+    renderLlmState();
     if (els.graphGroup) els.graphGroup.value = state.graphGroup;
     const st = store.all;
     state.qaCount = st.qaCount || 0;
