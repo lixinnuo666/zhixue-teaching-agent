@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>智学·多模态教学智能体 | 图文解析 · 知识抽取 · 答疑辅导</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" />
+<link rel="stylesheet" href="assets/css/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js" defer></script>
+</head>
+<body>
+
+<header class="app-bar">
+  <div class="brand">
+    <div class="brand-logo">智</div>
+    <div class="brand-text">
+      <h1>智学 · 多模态教学智能体</h1>
+      <p>图文素材解析 → 知识点结构化抽取 → 交互式答疑辅导</p>
+    </div>
+  </div>
+  <div class="app-bar-actions">
+    <span class="engine-chip" id="engineChip" title="本地引擎运行状态">本地引擎就绪</span>
+    <button class="btn ghost" id="btnSamples">载入示例素材</button>
+    <button class="btn ghost" id="btnExport">导出笔记</button>
+    <button class="btn icon" id="btnTheme" title="切换主题">◐</button>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- ============ 侧边栏：素材库 ============ -->
+  <aside class="sidebar">
+    <div class="panel-block">
+      <h2 class="block-title">素材输入</h2>
+      <div class="dropzone" id="dropzone">
+        <div class="dz-main">拖拽 / 粘贴图片到此处</div>
+        <div class="dz-sub">支持 PNG · JPG · WEBP，或点击下方按钮</div>
+        <div class="dz-actions">
+          <button class="btn primary sm" id="btnPickImage">选择图片</button>
+          <button class="btn ghost sm" id="btnPasteText">粘贴文本</button>
+        </div>
+        <input type="file" id="fileInput" accept="image/*" multiple hidden />
+      </div>
+      <div class="paste-box hidden" id="pasteBox">
+        <textarea id="pasteArea" rows="6" placeholder="在此粘贴讲义、课文、试题等文字内容…"></textarea>
+        <div class="row-end">
+          <button class="btn ghost sm" id="btnCancelPaste">取消</button>
+          <button class="btn primary sm" id="btnSubmitPaste">加入解析</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-block">
+      <div class="block-head">
+        <h2 class="block-title">素材库</h2>
+        <button class="btn link sm" id="btnClearAll">清空</button>
+      </div>
+      <div class="lib-tools">
+        <input id="matSearch" class="input sm" placeholder="搜索素材 / 学科…" />
+        <select id="matCatFilter" class="input sm" title="按学科筛选">
+          <option value="">全部分类</option>
+        </select>
+        <select id="matSort" class="input sm" title="排序方式">
+          <option value="cat">按分类分组</option>
+          <option value="time">按添加时间</option>
+          <option value="name">按名称</option>
+        </select>
+      </div>
+      <ul class="material-list" id="materialList"></ul>
+      <div class="empty-tip" id="materialEmpty">暂无素材，先添加图片或文本 →</div>
+      <button class="btn ghost sm block-btn" id="btnSaveAllKb">⇪ 全部素材存入知识库</button>
+    </div>
+
+    <div class="panel-block stat-block">
+      <h2 class="block-title">解析概览</h2>
+      <div class="stat-grid" id="statGrid">
+        <div class="stat"><b id="statMat">0</b><span>素材</span></div>
+        <div class="stat"><b id="statTerm">0</b><span>知识点</span></div>
+        <div class="stat"><b id="statRel">0</b><span>关系</span></div>
+        <div class="stat"><b id="statQa">0</b><span>提问</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ 工作区 ============ -->
+  <section class="workspace">
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="parse">① 图文解析</button>
+      <button class="tab" data-tab="knowledge">② 知识结构</button>
+      <button class="tab" data-tab="graph">③ 知识图谱</button>
+      <button class="tab" data-tab="qa">④ 答疑辅导</button>
+      <button class="tab" data-tab="quiz">⑤ 练习测评</button>
+      <button class="tab" data-tab="report">⑥ 学习报告</button>
+      <button class="tab" data-tab="library">⑦ 个人知识库</button>
+    </nav>
+
+    <!-- ---- 面板1：图文解析 ---- -->
+    <div class="panel active" id="panel-parse">
+      <div class="split">
+        <div class="card">
+          <div class="block-head">
+            <h3 class="card-title">图像预览与视觉分析</h3>
+            <span class="hint" id="imgSourceHint"></span>
+          </div>
+          <div class="img-toolbar" id="imgToolbar">
+            <button class="ico-btn" id="btnZoomOut" title="缩小">−</button>
+            <b class="zoom-label" id="imgZoom">100%</b>
+            <button class="ico-btn" id="btnZoomIn" title="放大">＋</button>
+            <span class="tb-sep"></span>
+            <button class="btn ghost xs" id="btnImgFit">适应</button>
+            <button class="btn ghost xs" id="btnImg100">1:1</button>
+            <button class="btn ghost xs" id="btnImgRotate">⟳ 旋转</button>
+            <button class="btn ghost xs" id="btnImgReset">重置</button>
+            <button class="btn ghost xs" id="btnImgEnhance">增强对比</button>
+            <span class="tb-sep"></span>
+            <button class="btn ghost xs" id="btnImgBlocks">文字区标注</button>
+            <button class="btn ghost xs" id="btnImgFull">查看原图</button>
+          </div>
+          <div class="image-stage" id="imageStage">
+            <div class="image-placeholder" id="imagePlaceholder">尚未选择素材</div>
+            <div class="img-viewport" id="imgViewport" hidden>
+              <div class="img-wrap" id="imgWrap">
+                <img id="imagePreview" alt="素材预览" />
+                <canvas id="blockOverlay" class="block-overlay"></canvas>
+              </div>
+            </div>
+          </div>
+          <div class="img-meta" id="imgMeta"></div>
+          <div class="metric-grid" id="imageMetrics"></div>
+          <div class="color-bar" id="colorBar" title="主色分布"></div>
+          <div class="hist-wrap">
+            <span class="hist-title">亮度分布</span>
+            <canvas id="histCanvas" class="hist-canvas" height="70"></canvas>
+          </div>
+          <div class="quality-row" id="qualityBox"></div>
+          <div class="suggest-list" id="suggestBox"></div>
+          <div class="row-end">
+            <button class="btn primary sm" id="btnOcr">▶ 识别图中文字</button>
+          </div>
+          <p class="micro-tip" id="ocrTip">
+            图像视觉分析在本地 Canvas 上实时完成（尺寸/主色/清晰度/倾斜/分栏/文字区定位）；文字识别调用 Tesseract.js（需联网下载中文模型，失败会自动降级，可手动粘贴文本）。
+          </p>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">文本内容与抽取操作</h3>
+          <textarea class="text-work" id="textWork" placeholder="此处显示解析得到的文本，可直接编辑后重新抽取…"></textarea>
+          <div class="row-between">
+            <div class="chip-row" id="parseChips"></div>
+            <button class="btn primary" id="btnExtract">⚙ 抽取知识点</button>
+          </div>
+          <div class="log-box" id="extractLog"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- 面板2：知识结构 ---- -->
+    <div class="panel" id="panel-knowledge">
+      <div class="card">
+        <div class="block-head">
+          <h3 class="card-title">知识思维导图</h3>
+          <div class="filter-row">
+            <select id="mindMode" class="input sm" title="分区维度">
+              <option value="chapter">按章节分区</option>
+              <option value="type">按类型分区</option>
+              <option value="level">按重要度分区</option>
+              <option value="material">按素材分区</option>
+            </select>
+            <label class="micro grain">粒度
+              <input type="range" id="mindDepth" min="1" max="3" value="2" />
+              <b id="mindDepthLabel">标准</b>
+            </label>
+            <input id="termSearch" class="input sm" placeholder="搜索知识点…" />
+            <select id="termTypeFilter" class="input sm">
+              <option value="">全部类型</option>
+              <option value="concept">核心概念</option>
+              <option value="fact">事实数据</option>
+              <option value="person">人物/专有名词</option>
+              <option value="term">术语</option>
+            </select>
+            <button class="btn ghost sm" id="btnMindExpand">展开全部</button>
+            <button class="btn ghost sm" id="btnMindCollapse">折叠分支</button>
+          </div>
+        </div>
+        <div class="mind-wrap">
+          <div class="mind-canvas" id="mindBox"></div>
+          <aside class="mind-detail" id="mindDetail"></aside>
+        </div>
+        <div id="mindLegend"></div>
+      </div>
+      <div class="split">
+        <div class="card">
+          <h3 class="card-title">章节大纲</h3>
+          <div class="outline" id="outlineBox"></div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">公式 / 符号 / 数据</h3>
+          <div class="list-plain" id="formulaBox"></div>
+          <h3 class="card-title mt">关键关系</h3>
+          <div class="list-plain" id="relationBox"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- 面板3：知识图谱 ---- -->
+    <div class="panel" id="panel-graph">
+      <div class="card">
+        <div class="block-head">
+          <h3 class="card-title">知识点关系图谱</h3>
+          <div class="filter-row">
+            <select id="graphGroup" class="input sm" title="分区维度">
+              <option value="category">按学科分区</option>
+              <option value="type">按类型分区</option>
+              <option value="material">按素材分区</option>
+            </select>
+            <select id="graphCatFilter" class="input sm" title="只看某一分区">
+              <option value="">全部分区</option>
+            </select>
+            <label class="micro">边数权重 <input type="range" id="graphDepth" min="1" max="12" value="6" /></label>
+            <button class="btn ghost sm" id="btnGraphReset">重置视图</button>
+          </div>
+        </div>
+        <canvas id="graphCanvas" class="graph-canvas"></canvas>
+        <div class="graph-legend" id="graphLegend"></div>
+        <p class="micro-tip">节点按所选维度分区聚拢，同色同区；点击图例可只看某一分区。拖拽节点可调整位置（松手后自动钉住，虚线圈标记），双击解除钉住；空白处拖动可平移，滚轮缩放。节点越大表示重要度越高，连线表示共现或语义关系。</p>
+      </div>
+    </div>
+
+    <!-- ---- 面板4：答疑辅导 ---- -->
+    <div class="panel" id="panel-qa">
+      <div class="card qa-card">
+        <div class="chat-window" id="chatWindow"></div>
+        <div class="mode-row" id="modeRow">
+          <span class="micro">讲解方式：</span>
+          <button class="mode active" data-mode="direct">直接回答</button>
+          <button class="mode" data-mode="steps">分步讲解</button>
+          <button class="mode" data-mode="example">举例说明</button>
+          <button class="mode" data-mode="socratic">引导启发</button>
+        </div>
+        <div class="chip-row" id="suggestRow"></div>
+        <div class="chat-input-row">
+          <input id="qaInput" class="input" placeholder="向智能助教提问，例如：什么是光合作用？它分为哪几个阶段？" />
+          <button class="btn primary" id="btnAsk">发送</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- 面板5：练习测评 ---- -->
+    <div class="panel" id="panel-quiz">
+      <div class="card">
+        <div class="block-head">
+          <h3 class="card-title">自动生成练习</h3>
+          <div class="filter-row">
+            <select id="quizCount" class="input sm">
+              <option value="5">5 题</option>
+              <option value="8" selected>8 题</option>
+              <option value="10">10 题</option>
+            </select>
+            <button class="btn primary sm" id="btnGenQuiz">生成试卷</button>
+          </div>
+        </div>
+        <div id="quizBox" class="quiz-box"></div>
+        <div class="row-end hidden" id="quizSubmitRow">
+          <button class="btn primary" id="btnSubmitQuiz">提交并判分</button>
+          <button class="btn ghost" id="btnRedoQuiz">重做</button>
+        </div>
+        <div id="quizResult" class="result-box hidden"></div>
+      </div>
+    </div>
+
+    <!-- ---- 面板6：学习报告 ---- -->
+    <div class="panel" id="panel-report">
+      <div class="split">
+        <div class="card">
+          <h3 class="card-title">知识点掌握度</h3>
+          <canvas id="masteryCanvas" class="chart-canvas"></canvas>
+        </div>
+        <div class="card">
+          <h3 class="card-title">学习概览</h3>
+          <div class="stat-grid big" id="reportStats"></div>
+          <h3 class="card-title mt">错题本</h3>
+          <div class="list-plain" id="wrongBox"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- 面板7：个人知识库 ---- -->
+    <div class="panel" id="panel-library">
+      <div class="card">
+        <div class="block-head">
+          <h3 class="card-title">分类知识库</h3>
+          <div class="filter-row">
+            <input id="kbSearch" class="input sm" placeholder="搜索已入库知识点…" />
+            <select id="kbCatFilter" class="input sm"><option value="">全部分类</option></select>
+            <button class="btn ghost sm" id="btnKbExport">导出 Markdown</button>
+            <button class="btn ghost sm" id="btnKbClear">清空</button>
+          </div>
+        </div>
+        <div class="kb-overview" id="kbOverview"></div>
+        <div class="kb-cats" id="kbCats"></div>
+        <div class="kb-list" id="kbList"></div>
+        <p class="micro-tip">
+          素材抽取知识点后会自动按学科归入本库；素材删除不影响已入库条目。同一知识点再次入库时会保留更完整的释义。
+        </p>
+      </div>
+    </div>
+
+  </section>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<!-- 原图查看器 -->
+<div class="lightbox" id="lightbox" hidden>
+  <div class="lb-bar">
+    <span id="lbInfo" class="lb-info"></span>
+    <span class="lb-actions">
+      <button class="btn ghost sm" id="lbFit">适应窗口</button>
+      <button class="btn ghost sm" id="lb100">实际大小</button>
+      <button class="ico-btn" id="lbClose" title="关闭">✕</button>
+    </span>
+  </div>
+  <div class="lb-body" id="lbBody"><img id="lbImg" alt="原图" /></div>
+</div>
+
+<script type="module" src="assets/js/app.js"></script>
+</body>
+</html>
